@@ -1,0 +1,44 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.so
+build/
+dist/
+*.egg-info/
+.venv/
+venv/
+env/
+
+# ===== Environment Variables =====
+.env
+.env.local
+
+# ===== Local Models (large files) =====
+models/
+emotion_model/
+whisper_tiny_local/
+
+# ===== Data & Runtime =====
+data/
+chroma_memory/
+generated_images/
+temp_record.wav
+*.log
+
+# ===== Test Images =====
+test*.jpg
+test*.png
+*.compressed.jpg
+
+# ===== Version Backups (if not needed) =====
+版本/
+
+# ===== IDE =====
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
