@@ -1,102 +1,161 @@
-# 🤖 AI 语音助手
+# 🤖 多模态智能体桌面助手
 
-一个基于 **PyQt6 + DeepSeek + 本地 Whisper + 情感识别 + ChromaDB 长期记忆** 的桌面智能助手。
+> **Multimodal Desktop Agent with Agentic RAG & Context Compression**
 
-支持 **语音输入 → 情感识别 → Agent 工具调用 → 流式输出** 的完整链路，具备联网搜索、天气查询、数学计算、记忆检索等能力。
+一个多模态桌面智能体，实现 **语音 / 文字 / 图片输入 → 情感识别 → ReAct Agent → 上下文压缩 → 流式输出 → 语音播报** 的完整闭环。
+
+集成 **19 个 Agent 工具**（5 类）、**Agentic RAG 私有知识库**、**高德地图 MCP**、**三级上下文 + 三级缓存**、**LangSmith 全链路可观测**。
+
+[![Python](https://img.shields.io/badge/Python-3.10+-blue)](https://www.python.org/)
+[![PyQt6](https://img.shields.io/badge/PyQt6-6.6+-green)](https://pypi.org/project/PyQt6/)
+[![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
+[![LangSmith](https://img.shields.io/badge/Observability-LangSmith-purple)](https://smith.langchain.com/)
 
 ---
 
 ## ✨ 功能特性
 
-### 🎤 语音交互
-- 本地 **Faster-Whisper** 语音识别（16kHz，中文优化）
-- 无需联网，模型加载后全局缓存
-- 录音按钮带呼吸动画，状态一目了然
+### 🎤 多模态输入
+- **文字**：直接对话
+- **语音**：本地 **Faster-Whisper** 识别（16kHz，中文优化，模型全局缓存）
+- **图片**：**通义千问 VL** 理解（UI 层前置处理为文字描述）
+
+### 🔊 多模态输出
+- **流式文字**：逐 chunk 渲染，打字机效果
+- **语音播报**：**Edge-TTS**（微软免费服务），5 种中文音色，可一键开关
+- **文生图**：**通义万相**，注册为 Agent 工具，生成后自动打开
 
 ### 🧠 情感识别
 - 本地中文情感分类模型（Transformers）
 - 7 类情感标签：`positive / negative / neutral / angry / sad / anxious / happy`
-- 自动注入情感提示词，让 AI 根据用户情绪调整语气
+- 识别结果注入提示词，让 AI 根据用户情绪调整语气
 
-### 🛠️ Agent 工具调用（ReAct 循环）
-- **联网搜索**（Tavily）：实时新闻、比赛、股价、事件
-- **天气查询**（wttr.in）：实时天气 + 未来三天预报
-- **数学计算**（AST 安全求值，防注入）
-- **时间查询**：当前日期、时间、星期
-- **记忆检索**：从长期记忆中找回相关历史
+### 🤖 自研 ReAct Agent
+- 基于 **DeepSeek 原生 `tool_calls`** 实现流式推理与工具调用
+- 解决 `delta.tool_calls` **跨 chunk 分片传输**的累积合并问题
+- 支持**真流式输出**与**用户随时中断**
+- 通过 `AgentCallbacks` 回调抽象，**逻辑层完全不依赖 PyQt**，可单独测试
 
-### 💾 长期记忆
-- 基于 **ChromaDB** 向量数据库持久化
-- 每轮对话自动写入，支持语义检索
-- 独立存储目录 `chroma_memory/`
+### 🛠️ 5 类共 19 个 Agent 工具
+| 类别 | 工具 |
+|---|---|
+| **信息获取** | `search_tavily`（联网）、`get_weather`（天气） |
+| **计算与逻辑** | `calculate`（AST 安全计算）、`get_current_time` |
+| **记忆与知识** | `memory_search`（对话检索）、`search_driving_emotion`（RAG 知识库） |
+| **地图服务** | **高德地图 MCP**（12 个工具：搜索 / 路线 / 地理编码 / 天气等） |
+| **多模态生成** | `generate_image`（文生图） |
+
+### 📚 Agentic RAG 私有知识库
+- **把知识库检索注册为 Agent 工具**，由 Agent 自主决定是否调用
+- 自研 `EmbeddingFunction`（`transformers + torch`），绕开 `sentence-transformers` 版本坑
+- 中文专用模型 `BAAI/bge-small-zh-v1.5`，检索准确率显著提升
+- **三重防幻觉约束**（工具描述 + 系统提示 + 返回末尾警告）
+- 已导入 200 条车载语音情感分析报告
+
+### 🔄 三级上下文 + 三级缓存
+- **三级上下文**：最近 N 条原样保留 + 中间历史 LLM 压缩成摘要 + 更早历史存向量库按需召回
+- **三级缓存**：ChromaDB 持久化 + 进程内存 + 重新生成兜底
+- 摘要用**历史 MD5 hash** 做 key，相同历史只压缩一次
+- **长对话 token 成本恒定**
+
+### 📊 LangSmith 全链路可观测
+- `wrap_openai` 自动追踪所有 LLM 调用
+- `@traceable` 追踪 Agent 循环、工具执行、摘要生成
+- 可视化每次对话的完整调用链，**性能瓶颈一目了然**
 
 ### 🎨 现代化 UI
 - QSS 样式表 + 聊天气泡（用户蓝 / AI 绿 / 系统灰）
 - 输入框聚焦发光（`QGraphicsDropShadowEffect`）
 - 语音按钮脉冲呼吸（`QPropertyAnimation`）
-- 流式打字机效果
+- **流式渲染防崩**：流式期间纯文本通道 + 结束后重绘 HTML 气泡
 
-### ⚡ 流式输出
-- 逐 chunk 渲染，无需等待完整回复
-- 支持中途打断（`requestInterruption`）
+### 🔄 连续对话模式
+- AI 播报完自动开麦，不用按键
+- 状态机管理（IDLE / LISTENING / TRANSCRIBING / THINKING / SPEAKING）
+- 连续 2 次静音自动退出
 
 ---
+
 
 ## 📁 项目结构
 
 ```
 AI语音助手/
-├── main.py                     # 🎯 程序唯一入口
-├── .env                        # 🔑 API Key 配置（需自建）
+├── main.py # 🎯 程序唯一入口
+├── requirements.txt
+├── README.md
+├── .env # API Key 配置（不入库）
+├── .gitignore
 │
-├── ai_service/                 # AI 服务层
-│   ├── __init__.py
-│   ├── config.py               # API Key / 模型参数集中管理
-│   ├── llm_client.py           # DeepSeek client、历史裁剪
-│   ├── agent_loop.py           # ReAct 循环 + 流式解析
-│   ├── thread_adapter.py       # QThread 适配层
-│   └── asr_service.py          # Whisper 语音识别（模型缓存）
+├── ai_service/ # ① AI 服务层
+│ ├── init.py
+│ ├── config.py # API Key / 模型参数 / 压缩参数
+│ ├── llm_client.py # DeepSeek client + 三级上下文管理
+│ ├── agent_loop.py # ReAct 循环（纯逻辑）
+│ ├── thread_adapter.py # QThread 适配层
+│ ├── asr_service.py # Whisper 语音识别
+│ ├── vlm_client.py # 通义千问 VL 图片理解
+│ └── image_gen.py # 通义万相文生图
 │
-├── audio/                      # 音频采集
-│   ├── __init__.py
-│   ├── config.py               # 采样率 / 声道 / 缓冲区
-│   └── recorder.py             # PyAudio 录音线程
+├── audio/ # ② 音频输入输出
+│ ├── init.py
+│ ├── config.py
+│ ├── recorder.py # PyAudio 录音
+│ ├── tts.py # Edge-TTS 语音合成
+│ └── continuous.py # 连续对话状态机
 │
-├── emotion/                    # 情感识别
-│   ├── __init__.py
-│   ├── config.py               # 标签映射 / 模型路径 / 阈值
-│   ├── label_utils.py          # 标签归一化（纯函数）
-│   ├── model_loader.py         # 线程安全模型缓存
-│   ├── recognizer.py           # 识别纯逻辑
-│   └── thread.py               # QThread 适配层
+├── emotion/ # ③ 情感识别
+│ ├── init.py
+│ ├── config.py
+│ ├── label_utils.py # 标签归一化（纯函数）
+│ ├── model_loader.py # 线程安全模型缓存
+│ ├── recognizer.py # 识别纯逻辑
+│ └── thread.py
 │
-├── memory/                     # 长期记忆
-│   ├── __init__.py
-│   └── service.py              # ChromaDB 存储与检索
+├── memory/ # ④ 记忆层（3 个 collection）
+│ ├── init.py
+│ ├── config.py
+│ ├── embedding.py # 自定义 EmbeddingFunction
+│ ├── chat_memory.py # 对话历史 + 摘要存取
+│ ├── knowledge_base.py # 知识库（RAG）
+│ └── service.py # 单例门面
 │
-├── prompt/                     # 提示词管理
-│   ├── __init__.py
-│   └── manager.py              # 动态系统提示词 / 情感提示
+├── prompt/ # ⑤ 提示词管理
+│ ├── init.py
+│ └── manager.py
 │
-├── tools/                      # Agent 工具集
-│   ├── __init__.py             # 触发 @register_tool
-│   ├── base.py                 # 注册中心 + ToolExecutor
-│   ├── web_search.py           # 联网搜索
-│   ├── weather.py              # 天气查询
-│   ├── calculator.py           # 数学计算
-│   ├── time_tool.py            # 时间查询
-│   └── memory_tool.py          # 记忆检索
+├── tools/ # ⑥ Agent 工具集（19 个）
+│ ├── init.py
+│ ├── base.py # 注册中心 + ToolExecutor
+│ ├── web_search.py
+│ ├── weather.py
+│ ├── calculator.py
+│ ├── time_tool.py
+│ ├── memory_tool.py
+│ ├── emotion_kb.py # RAG 知识库检索
+│ ├── mcp_map.py # 高德地图 MCP（12 个工具）
+│ └── image_gen_tool.py # 文生图
 │
-├── ui/                         # UI 层
-│   ├── __init__.py
-│   ├── main_window.py          # 主窗口
-│   ├── styles.py               # QSS 样式表
-│   ├── widgets.py              # 自定义控件
-│   └── chat_view.py            # 聊天气泡渲染
+├── ui/ # ⑦ UI 层
+│ ├── init.py
+│ ├── main_window.py # 主窗口（含 VLM 前置处理）
+│ ├── styles.py
+│ ├── widgets.py
+│ └── chat_view.py
 │
-├── emotion_model/              # 情感模型目录（需自行放置）
-├── whisper_tiny_local/         # Whisper 模型目录（需自行放置）
-└── chroma_memory/              # 长期记忆数据库（自动生成）
+├── scripts/ # ⑧ 离线批处理
+│ ├── init.py
+│ ├── parse_report.py # Word → JSON
+│ ├── ingest_report.py # JSON → ChromaDB
+│ ├── preview_summary.py
+│ └── list_mcp_tools.py
+│
+├── data/ # 原始数据（不入库）
+├── models/ # 本地 embedding 模型（不入库）
+├── emotion_model/ # 情感模型（不入库）
+├── whisper_tiny_local/ # Whisper 模型（不入库）
+├── generated_images/ # 文生图输出（不入库）
+└── chroma_memory/ # ChromaDB 持久化（不入库）
 ```
 
 ---
@@ -104,23 +163,21 @@ AI语音助手/
 ## 🚀 快速开始
 
 ### 1. 环境要求
-
-- **Python** ≥ 3.10
-- **操作系统**：Windows / macOS / Linux
-- **麦克风**（语音功能需要）
+- Python ≥ 3.10
+- Windows / macOS / Linux
+- 麦克风（语音功能需要）
 
 ### 2. 安装依赖
 
 ```bash
-pip install PyQt6 openai python-dotenv requests pyaudio
-pip install faster-whisper transformers torch
-pip install chromadb tavily-python
-```
-
-或使用 `requirements.txt`：
+pip install -r requirements.txt
 
 ```bash
-pip install -r requirements.txt
+pip install PyQt6 PyQt6-Multimedia openai python-dotenv requests
+pip install pyaudio faster-whisper edge-tts
+pip install transformers torch
+pip install chromadb python-docx
+pip install mcp dashscope pillow langsmith
 ```
 
 ### 3. 准备本地模型
@@ -147,6 +204,14 @@ git clone https://huggingface.co/Systran/faster-whisper-tiny whisper_tiny_local
 huggingface-cli download uer/roberta-base-finetuned-jd-binary-chinese --local-dir emotion_model
 ```
 
+#### `models/bge-small-zh-v1.5/` — 
+
+任选一个中文情感模型（如 `BAAI/bge-small-zh-v1.5`）：
+
+```bash
+huggingface-cli download BAAI/bge-small-zh-v1.5 --local-dir models/bge-small-zh-v1.5
+```
+
 > 💡 **提示**：模型目录里应有 `config.json`、`pytorch_model.bin`（或 `model.safetensors`）、`vocab.txt` 等文件。
 
 ### 4. 配置 API Key
@@ -155,18 +220,21 @@ huggingface-cli download uer/roberta-base-finetuned-jd-binary-chinese --local-di
 
 ```env
 # ===== 必填 =====
-DEEPSEEK_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxx
-TAVILY_API_KEY=tvly-xxxxxxxxxxxxxxxxxxxxxxxx
+DEEPSEEK_API_KEY=sk-xxxxxxxx
+TAVILY_API_KEY=tvly-xxxxxxxx
+DASHSCOPE_API_KEY=sk-xxxxxxxx
 
-# ===== 可选（有默认值）=====
+# ===== 可选 =====
 DEEPSEEK_BASE_URL=https://api.deepseek.com
 DEEPSEEK_MODEL=deepseek-chat
 DEEPSEEK_TIMEOUT=60.0
 DEFAULT_TEMPERATURE=0.5
 
 MAX_AGENT_ITERATIONS=5
-HISTORY_MAX_LEN=12
-HISTORY_KEEP_LEN=10
+
+HISTORY_MAX_LEN=6
+HISTORY_KEEP_LEN=4
+HISTORY_SUMMARY_MAX_TOKENS=300
 
 EMOTION_MIN_CONFIDENCE=0.6
 EMOTION_MAX_LENGTH=128
@@ -174,12 +242,20 @@ EMOTION_MAX_LENGTH=128
 AUDIO_SAMPLE_RATE=16000
 AUDIO_CHANNELS=1
 AUDIO_CHUNK=1024
+CONTINUOUS_RECORD_SECONDS=5
+
+AMAP_KEY=xxxxxxxx
+
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_API_KEY=lsv2_pt_xxxxxxxx
+LANGCHAIN_PROJECT=multimodal-desktop-agent
+LANGCHAIN_ENDPOINT=https://api.smith.langchain.com
 ```
 
 **获取 API Key**：
 - DeepSeek：https://platform.deepseek.com/
 - Tavily：https://tavily.com/
-
+获取 API Key：DeepSeek 平台、Tavily、阿里云百炼、LangSmith。
 ### 5. 启动
 
 ```bash
@@ -196,18 +272,27 @@ python main.py
 | **语音输入** | 点击"🎤 语音"开始录音，再点一次停止，自动识别并发送 |
 | **中断回复** | 关闭窗口会自动中断所有后台线程 |
 | **查看情绪** | 聊天区会显示 `[情绪识别] 😊 positive（置信度 85%）` |
+| **图片理解** | 点"📎"选择图片，输入问题后发送` |
+| **连续对话** | 点"🔄 连续对话"，AI 播报完自动开麦` |
+| **语音播报** |点"🔊"开关 TTS |
 
 ### 典型对话示例
 
 ```
-用户：马鞍山今天天气怎么样？
-AI：[调用 get_weather] 马鞍山今天晴，18~26°C...
+用户：北京今天天气怎么样？
+AI：[调用 get_weather] 北京今天晴，18~26°C...
 
 用户：帮我算一下 (25 + 37) * 3
 AI：[调用 calculate] 计算结果：(25 + 37) * 3 = 186
 
-用户：我上次说想去哪旅游？
-AI：[调用 memory_search] 根据历史记忆，你之前提到过想去云南...
+用户：上次有人堵车时很愤怒，系统建议了什么？
+AI：[调用 search_driving_emotion] 根据知识库，建议播放舒缓音乐...
+
+用户：画一只赛博朋克风格的猫
+AI：[调用 generate_image] 图片已生成：generated_images/xxx.png
+
+用户：天安门附近有什么餐厅？
+AI：[调用 map_search_places] 找到 5 家餐厅...
 ```
 
 ---
@@ -217,46 +302,53 @@ AI：[调用 memory_search] 根据历史记忆，你之前提到过想去云南.
 ### 分层原则
 
 ```
-┌─────────────────────────────────────┐
-│  ui/          ← 界面与交互          │
-├─────────────────────────────────────┤
-│  ai_service/  ← AI 逻辑（纯逻辑）   │
-│  audio/       ← 音频采集            │
-│  emotion/     ← 情感识别（纯逻辑）  │
-│  memory/      ← 长期记忆            │
-│  prompt/      ← 提示词管理          │
-│  tools/       ← Agent 工具          │
-└─────────────────────────────────────┘
+┌─────────────────────────────────────────────┐
+│  ui/          ← 界面与交互                   │
+├─────────────────────────────────────────────┤
+│  ai_service/  ← AI 逻辑（纯逻辑，不依赖 PyQt）│
+│  audio/       ← 音频输入输出                  │
+│  emotion/     ← 情感识别（纯逻辑）            │
+│  memory/      ← 长期记忆 + RAG + 摘要          │
+│  prompt/      ← 提示词管理                    │
+│  tools/       ← Agent 工具集（19 个）          │
+└─────────────────────────────────────────────┘
 ```
 
-**核心设计**：
-- **纯逻辑层不依赖 PyQt**：`agent_loop.py`、`recognizer.py`、`service.py` 都是纯 Python，可单独测试、可复用
-- **QThread 适配层单独放置**：`thread_adapter.py`、`emotion/thread.py`、`audio/recorder.py` 只负责信号发射
-- **工具自动注册**：`@register_tool` 装饰器 + `tools/__init__.py` 显式导入，新增工具零侵入
+核心设计：
+纯逻辑层不依赖 PyQt：agent_loop.py / recognizer.py / memory service 都是纯 Python，可单独 pytest，可复用到 CLI / Web / 批处理
+回调抽象：AgentCallbacks 让 Agent 逻辑与 UI 完全解耦
+QThread 适配层单独放置：只负责信号发射
+工具自动注册：@register_tool 装饰器 + tools/__init__.py 显式导入，新增工具零侵入
 
 ### 数据流
 
 ```
-用户输入（文字 / 语音）
+用户输入（文字 / 语音 / 图片）
+        │
+        ▼
+   [图片前置处理] ──→ 通义千问 VL → 文字描述
         │
         ▼
    [情感识别线程] ──→ 情绪标签 + 置信度
         │
         ▼
-   [构建消息] ──→ 注入情感提示 + 动态时间
+   [构建消息] ──→ 注入情感提示 + 动态时间 + 三级上下文压缩
         │
         ▼
-   [Agent 线程]
+   [ReAct Agent 循环]
         │
         ├─→ 流式输出 chunk ──→ UI 打字机
         │
-        └─→ 工具调用 ──→ 搜索 / 天气 / 计算 / 记忆
+        └─→ 工具调用 ──→ 19 个工具（含 RAG + 地图 MCP）
                 │
                 ▼
            结果拼回 messages，继续下一轮
         │
         ▼
-   最终回复 → 写入 ChromaDB 长期记忆
+   最终回复 → 写入 ChromaDB（对话 + 摘要）
+        │
+        ▼
+   [TTS 播报] ──→ Edge-TTS → 扬声器
 ```
 
 ---
@@ -374,13 +466,21 @@ MemoryService().clear_all()
 ---
 
 ## 🎯 设计亮点
+✅ 真正的多模态：文字 / 语音 / 图片三种输入，文字 / 语音 / 图像三种输出
 
-- ✅ **纯逻辑层无 PyQt 依赖**，可单测、可复用
-- ✅ **模型全局缓存 + 双检锁**，避免重复加载
-- ✅ **流式输出 + 中断支持**，用户体验流畅
-- ✅ **工具自动注册机制**，新增工具零侵入
-- ✅ **情感识别 + 长期记忆**，让 AI 更"懂你"
-- ✅ **QSS + QPropertyAnimation** 实现现代化 UI，绕过 QSS 局限
+✅ 自研 ReAct 循环：不到 200 行，完全可控
+
+✅ Agentic RAG：RAG 工具化，Agent 自主决策
+
+✅ 三级上下文 + 三级缓存：长对话 token 成本恒定
+
+✅ 纯逻辑与 UI 完全解耦：核心逻辑可单独 pytest
+
+✅ 流式渲染防崩：纯文本插入 + 结束后重绘气泡
+
+✅ 三重防幻觉：工具描述 + 系统提示 + 返回末尾警告
+
+✅ LangSmith 全链路可观测：可视化完整调用链
 
 ---
 
@@ -397,3 +497,9 @@ MIT License
 - [ChromaDB](https://www.trychroma.com/) — 向量数据库
 - [Tavily](https://tavily.com/) — 联网搜索
 - [wttr.in](https://wttr.in/) — 天气数据
+- DeepSeek — LLM 服务
+- Edge-TTS — 语音合成
+- 通义千问 VL — 图片理解
+- 通义万相 — 文生图
+- 高德地图 MCP — 地图服务
+- LangSmith — LLM 应用可观测
